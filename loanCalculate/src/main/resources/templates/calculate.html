@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>贷款利息计算</title>
+</head>
+<body>
+    <div>
+        <form id="loanForm">
+            <label>贷款金额(万元)：<input type="text" name="loanMoney"></label><br><br>
+            <label>贷款开始时间：<input type="date" name="startDate"></label><br><br>
+            <label>贷款结束时间：<input type="date" name="endDate"></label><br><br>
+            计息方式：<select name="interestAccrual" id="ia">
+                        <option value="fixedRate">固定利率</option>
+                        <option value="floatingRate">浮动利率</option>
+                     </select>
+            <label>利率(%)：<input type="text" name="loanRate"></label>
+            <label style="display: none" id="dayLPRDiv">每个月的哪一天LPR变化？<input type="text" name="dayLPR"></label>
+            <br><br>
+            结息方式：<select name="insterestStyle">
+                        <option value="month">月结</option>
+                        <option value="season">季结</option>
+                        <option value="year">年结</option>
+                     </select>
+        </form>
+        <br>
+        <label>还本方式：<input type="button" onclick="add()" value="添加"></label>
+        <form id="repayForm">
+            <table id="repayTable" border="1px">
+                <tr>
+                    <td>还款日期</td>
+                    <td>本金(万元)</td>
+                    <td>操作</td>
+                </tr>
+            </table>
+        </form>
+        <br>
+        <input type="button" onclick="submits()" value="确定"><br>
+        <span>----------------------------------------------------------------------------------------</span><br>
+    </div>
+    <table>
+        <tr>
+            <td>
+                <div>
+                    <table id="interest" border="1px">
+                        <tr>
+                            <td>结息日期</td>
+                            <td>利息(万元)</td>
+                            <td>操作</td>
+                        </tr>
+                    </table>
+                </div>
+            </td>
+            <td>
+                <div id="lprDiv" style="display: none">
+                    <table id="lpr" border="1px">
+                        <tr>
+                            <td>日期</td>
+                            <td>LPR(%)</td>
+                        </tr>
+                    </table>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+</body>
+<script type="text/javascript" src="js/jquery-3.4.1.js"></script>
+<script>
+
+    var repayInput = "<tr>" +
+        "<td><input type='date' name='repayDate'></td>" +
+        "<td><input type='text' name='repayment'></td>" +
+        "<td><input type='button' onclick='delRow(this)' value='删除'></td>" +
+        "</tr>";
+
+    function add() {
+        $("#repayTable").append(repayInput);//添加还本计划
+    }
+
+    //如果选择固定利率-->隐藏，浮动利率-->显示
+    $("select#ia").change(function(){
+        var target = document.getElementById("dayLPRDiv");
+        if($("#ia").val() === "fixedRate"){
+            target.style.display = "none";
+        }
+        if($("#ia").val() === "floatingRate"){
+            target.style.display = "";
+        }
+    });
+
+    //删除tr
+    function delRow(obj, removeRow) {
+        var tr = this.getRowObj(obj);
+        if (tr != null) {
+            tr.parentNode.removeChild(tr);
+        } else {
+            throw new Error("the given object is not contained by the table");
+        }
+    }
+    function getRowObj(obj) {
+        var i = 0;
+        while (obj.tagName.toLowerCase() != "tr") {
+            obj = obj.parentNode;
+            if (obj.tagName.toLowerCase() == "table")
+                return null;
+        }
+        return obj;
+    }
+
+    //表单数据转换为json
+    function toJson(id) {
+        var json = {};
+        var map = $(id).serializeArray();
+        $.each(map, function(){
+            json[this.name] = this.value;
+        });
+        return json;
+    }
+
+    //转换为数组
+    function toArray(id) {
+        var json = {};
+        var arr = [];
+        var i = 0;
+        var map = $(id).serializeArray();
+        $.each(map,function () {
+            json[this.name] = this.value;
+            i++;
+            if(i === 2){
+                arr.push(json);
+                json = {};
+                i = 0;
+            }
+        });
+        return arr;
+    }
+
+    //提交表单
+    function submits(){
+        var loanJson = toJson("#loanForm");
+        loanJson["repays"] = toArray("#repayForm");//添加还本计划的数据
+        $.ajax({
+            type: "post",
+            url: "/getInterest",
+            async: true,
+            contentType: 'application/json',
+            dataType: 'JSON',
+            data: JSON.stringify(loanJson),//将对象转为json字符串
+            success: function(obj) {
+                var length = document.getElementById("interest").rows.length;
+                for (let i = 1; i < length; i++) { // 删除上一次显示的利息内容
+                    document.getElementById('interest').deleteRow(1);
+                }
+                var target = document.getElementById("lprDiv"); //lpr数据table所在的div
+                var lprLength = document.getElementById("lpr").rows.length;
+                for (let i = 1; i < lprLength; i++) { // 删除上一次显示的lpr内容
+                    document.getElementById("lpr").deleteRow(1);
+                }
+                target.style.display = "none"; //隐藏lpr数据table
+                for(interest of obj){
+                    if(interest == null) return;
+                    var lprData = interest.lprData;//LPR数据
+                    //如果有lpr的数据，那么将其显示出来
+                    if(lprData != null){
+                        target.style.display = "";//显示lpr的table表格
+                        for (let i = 0; i < lprData.length - 1; i++) {
+                            var lprTable = "<tr>" +
+                                "<td>"+lprData[i].lprDate+"至"+lprData[i+1].lprDate+"</td>" +
+                                "<td>"+lprData[i].lprRate+"</td>" +
+                                "</tr>";
+                            $("#lpr").append(lprTable);
+                        }
+                    }
+                    //显示利息结果
+                    var interestList = "<tr>" +
+                        "<td>"+interest.interestDate+"</td>" +
+                        "<td>"+interest.interest+"</td>" +
+                        "<td><input type='button' onclick='delRow(this)' value='删除'></td>" +
+                        "</tr>";
+                    $("#interest").append(interestList);
+                }
+            }
+        });
+    }
+</script>
+</html>
