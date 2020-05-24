@@ -207,7 +207,7 @@ public class CalculateService {
         for (LPRData lprDatum : lprData) {
             LocalDate date = lprDatum.getLprDate();
 //            在最后这段时间内如果有利率变化，做同上操作
-            if(LoanUtils.betweenAndAfterEqual(start, end, date)){
+            if(LoanUtils.betweenAndAfterEqual(start, end, date) && loanMoney > 0){
                 long days = ChronoUnit.DAYS.between(start, date);
                 interest = interest + (loanMoney*loanRate*days)/36000;
                 start = date;
